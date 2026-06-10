@@ -1,5 +1,6 @@
 package ru.practirum.collector.service;
 
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -10,6 +11,8 @@ import ru.practirum.collector.model.hub.HubEvent;
 import ru.practirum.collector.model.sensor.SensorEvent;
 import ru.yandex.practicum.kafka.telemetry.event.HubEventAvro;
 import ru.yandex.practicum.kafka.telemetry.event.SensorEventAvro;
+
+import java.time.Duration;
 
 @Slf4j
 @Service
@@ -30,6 +33,8 @@ public class CollectorService {
             SensorEventAvro avroEvent = sensorEventConverter.convert(event);
             ProducerRecord<String, Object> record = new ProducerRecord<>(
                     sensorsTopic,
+                    null,
+                    event.getTimestamp().toEpochMilli(),
                     event.getHubId(),
                     avroEvent
             );
@@ -53,6 +58,8 @@ public class CollectorService {
             HubEventAvro avroEvent = hubEventConverter.convert(event);
             ProducerRecord<String, Object> record = new ProducerRecord<>(
                     hubsTopic,
+                    null,
+                    event.getTimestamp().toEpochMilli(),
                     event.getHubId(),
                     avroEvent
             );
@@ -68,6 +75,16 @@ public class CollectorService {
         } catch (Exception e) {
             log.error("Error processing hub event: hubId={}, type={}", event.getHubId(), event.getType(), e);
             throw new RuntimeException("Failed to process hub event", e);
+        }
+    }
+
+    @PreDestroy
+    public void close() {
+        log.info("Closing Kafka producer");
+        if (kafkaProducer != null) {
+            kafkaProducer.flush();
+            kafkaProducer.close(Duration.ofSeconds(10));
+            log.info("Kafka producer closed");
         }
     }
 }
