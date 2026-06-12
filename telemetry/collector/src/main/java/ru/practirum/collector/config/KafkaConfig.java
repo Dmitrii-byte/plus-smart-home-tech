@@ -7,11 +7,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import ru.practirum.collector.serialize.GeneralAvroSerializer;
+import ru.yandex.practicum.kafka.telemetry.event.SensorsSnapshotAvro;
 
 import java.util.Properties;
 
 @Configuration
-public class KafkaProducerConfig {
+public class KafkaConfig {
 
     @Value("${kafka.bootstrap-servers}")
     private String bootstrapServers;
