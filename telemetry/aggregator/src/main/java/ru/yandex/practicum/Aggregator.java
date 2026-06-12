@@ -1,10 +1,10 @@
-package ru.practirum.aggregator;
+package ru.yandex.practicum;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.ConfigurableApplicationContext;
-import ru.practirum.aggregator.service.AggregationStarter;
+import ru.yandex.practicum.service.AggregationStarter;
 
 @SpringBootApplication
 @ConfigurationPropertiesScan

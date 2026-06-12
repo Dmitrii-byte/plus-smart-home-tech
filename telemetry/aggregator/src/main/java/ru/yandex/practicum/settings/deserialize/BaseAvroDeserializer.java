@@ -1,4 +1,4 @@
-package ru.practirum.aggregator.settings.deserialize;
+package ru.yandex.practicum.settings.deserialize;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.avro.Schema;

@@ -1,4 +1,4 @@
-package ru.practirum.aggregator.config;
+package ru.yandex.practicum.config;
 
 import org.apache.avro.specific.SpecificRecordBase;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -13,8 +13,8 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import ru.practirum.aggregator.settings.deserialize.SensorEventDeserializer;
-import ru.practirum.aggregator.settings.serialize.GeneralAvroSerializer;
+import ru.yandex.practicum.settings.deserialize.SensorEventDeserializer;
+import ru.yandex.practicum.settings.serialize.GeneralAvroSerializer;
 
 import java.util.Properties;
 
