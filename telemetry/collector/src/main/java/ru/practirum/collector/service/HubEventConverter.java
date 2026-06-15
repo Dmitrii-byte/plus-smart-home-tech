@@ -1,97 +1,90 @@
 package ru.practirum.collector.service;
 
+import com.google.protobuf.Timestamp;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import ru.practirum.collector.model.hub.*;
+import ru.yandex.practicum.grpc.telemetry.event.*;
 import ru.yandex.practicum.kafka.telemetry.event.*;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @Component
 public class HubEventConverter {
 
-    public HubEventAvro convert(HubEvent event) {
+    public HubEventAvro convert(HubEventProto event) {
         HubEventAvro.Builder builder = HubEventAvro.newBuilder()
                 .setHubId(event.getHubId())
-                .setTimestamp(event.getTimestamp());
+                .setTimestamp(convertTimestamp(event.getTimestamp()));
 
-        switch (event.getType()) {
-            case DEVICE_ADDED:
-                DeviceAddedEvent deviceAdded = (DeviceAddedEvent) event;
+        switch (event.getPayloadCase()) {
+            case DEVICE_ADDED -> {
+                DeviceAddedEventProto deviceAdded = event.getDeviceAdded();
                 builder.setPayload(DeviceAddedEventAvro.newBuilder()
-                        .setId(deviceAdded.getDeviceId())
-                        .setType(convertDeviceType(deviceAdded.getDeviceType()))
+                        .setId(deviceAdded.getId())
+                        .setType(convertDeviceType(deviceAdded.getType()))
                         .build());
-                break;
-
-            case DEVICE_REMOVED:
-                DeviceRemovedEvent deviceRemoved = (DeviceRemovedEvent) event;
+            }
+            case DEVICE_REMOVED -> {
+                DeviceRemovedEventProto deviceRemoved = event.getDeviceRemoved();
                 builder.setPayload(DeviceRemovedEventAvro.newBuilder()
-                        .setId(deviceRemoved.getDeviceId())
+                        .setId(deviceRemoved.getId())
                         .build());
-                break;
-
-            case SCENARIO_ADDED:
-                ScenarioAddedEvent scenarioAdded = (ScenarioAddedEvent) event;
+            }
+            case SCENARIO_ADDED -> {
+                ScenarioAddedEventProto scenarioAdded = event.getScenarioAdded();
                 builder.setPayload(ScenarioAddedEventAvro.newBuilder()
                         .setName(scenarioAdded.getName())
-                        .setConditions(convertConditions(scenarioAdded.getConditions()))
-                        .setActions(convertActions(scenarioAdded.getActions()))
+                        .setConditions(convertConditions(scenarioAdded.getConditionList()))
+                        .setActions(convertActions(scenarioAdded.getActionList()))
                         .build());
-                break;
-
-            case SCENARIO_REMOVED:
-                ScenarioRemovedEvent scenarioRemoved = (ScenarioRemovedEvent) event;
+            }
+            case SCENARIO_REMOVED -> {
+                ScenarioRemovedEventProto scenarioRemoved = event.getScenarioRemoved();
                 builder.setPayload(ScenarioRemovedEventAvro.newBuilder()
                         .setName(scenarioRemoved.getName())
                         .build());
-                break;
-
-            default:
-                log.error("Unknown hub event type: {}", event.getType());
-                throw new IllegalArgumentException("Unknown hub event type: " + event.getType());
+            }
+            default -> {
+                log.error("Unknown hub event payload case: {}", event.getPayloadCase());
+                throw new IllegalArgumentException("Unknown hub event type: " + event.getPayloadCase());
+            }
         }
 
         return builder.build();
     }
 
-    private DeviceTypeAvro convertDeviceType(DeviceType deviceType) {
-        switch (deviceType) {
-            case MOTION_SENSOR:
-                return DeviceTypeAvro.MOTION_SENSOR;
-            case TEMPERATURE_SENSOR:
-                return DeviceTypeAvro.TEMPERATURE_SENSOR;
-            case LIGHT_SENSOR:
-                return DeviceTypeAvro.LIGHT_SENSOR;
-            case CLIMATE_SENSOR:
-                return DeviceTypeAvro.CLIMATE_SENSOR;
-            case SWITCH_SENSOR:
-                return DeviceTypeAvro.SWITCH_SENSOR;
-            default:
-                throw new IllegalArgumentException("Unknown device type: " + deviceType);
-        }
+    private Instant convertTimestamp(Timestamp timestamp) {
+        return Instant.ofEpochSecond(timestamp.getSeconds(), timestamp.getNanos());
     }
 
-    private List<ScenarioConditionAvro> convertConditions(List<Map<String, Object>> conditions) {
+    private DeviceTypeAvro convertDeviceType(DeviceTypeProto deviceType) {
+        return switch (deviceType) {
+            case MOTION_SENSOR -> DeviceTypeAvro.MOTION_SENSOR;
+            case TEMPERATURE_SENSOR -> DeviceTypeAvro.TEMPERATURE_SENSOR;
+            case LIGHT_SENSOR -> DeviceTypeAvro.LIGHT_SENSOR;
+            case CLIMATE_SENSOR -> DeviceTypeAvro.CLIMATE_SENSOR;
+            case SWITCH_SENSOR -> DeviceTypeAvro.SWITCH_SENSOR;
+            default -> throw new IllegalArgumentException("Unknown device type: " + deviceType);
+        };
+    }
+
+    private List<ScenarioConditionAvro> convertConditions(List<ScenarioConditionProto> conditions) {
         List<ScenarioConditionAvro> result = new ArrayList<>();
 
-        for (Map<String, Object> condition : conditions) {
+        for (ScenarioConditionProto condition : conditions) {
             ScenarioConditionAvro.Builder builder = ScenarioConditionAvro.newBuilder()
-                    .setSensorId((String) condition.get("sensorId"))
-                    .setType(convertConditionType((String) condition.get("type")))
-                    .setOperation(convertOperation((String) condition.get("operation")));
+                    .setSensorId(condition.getSensorId())
+                    .setType(convertConditionType(condition.getType()))
+                    .setOperation(convertOperation(condition.getOperation()));
 
-            // Устанавливаем значение (может быть Integer, Boolean или null)
-            Object value = condition.get("value");
-            if (value instanceof Integer) {
-                builder.setValue((Integer) value);
-            } else if (value instanceof Boolean) {
-                builder.setValue((Boolean) value);
-            } else {
-                builder.setValue(null);
+            // Устанавливаем значение в зависимости от типа
+            switch (condition.getValueCase()) {
+                case BOOL_VALUE -> builder.setValue(condition.getBoolValue());
+                case INT_VALUE -> builder.setValue(condition.getIntValue());
+                case VALUE_NOT_SET -> builder.setValue(null);
             }
 
             result.add(builder.build());
@@ -100,18 +93,17 @@ public class HubEventConverter {
         return result;
     }
 
-    private List<DeviceActionAvro> convertActions(List<Map<String, Object>> actions) {
+    private List<DeviceActionAvro> convertActions(List<DeviceActionProto> actions) {
         List<DeviceActionAvro> result = new ArrayList<>();
 
-        for (Map<String, Object> action : actions) {
+        for (DeviceActionProto action : actions) {
             DeviceActionAvro.Builder builder = DeviceActionAvro.newBuilder()
-                    .setSensorId((String) action.get("sensorId"))
-                    .setType(convertActionType((String) action.get("type")));
+                    .setSensorId(action.getSensorId())
+                    .setType(convertActionType(action.getType()));
 
-            // Устанавливаем значение (может быть Integer или null)
-            Object value = action.get("value");
-            if (value instanceof Integer) {
-                builder.setValue((Integer) value);
+            // Устанавливаем значение, если оно есть
+            if (action.hasValue()) {
+                builder.setValue(action.getValue());
             } else {
                 builder.setValue(null);
             }
@@ -122,50 +114,34 @@ public class HubEventConverter {
         return result;
     }
 
-    private ConditionTypeAvro convertConditionType(String type) {
-        switch (type) {
-            case "MOTION":
-                return ConditionTypeAvro.MOTION;
-            case "LUMINOSITY":
-                return ConditionTypeAvro.LUMINOSITY;
-            case "SWITCH":
-                return ConditionTypeAvro.SWITCH;
-            case "TEMPERATURE":
-                return ConditionTypeAvro.TEMPERATURE;
-            case "CO2LEVEL":
-                return ConditionTypeAvro.CO2LEVEL;
-            case "HUMIDITY":
-                return ConditionTypeAvro.HUMIDITY;
-            default:
-                throw new IllegalArgumentException("Unknown condition type: " + type);
-        }
+    private ConditionTypeAvro convertConditionType(ConditionTypeProto type) {
+        return switch (type) {
+            case MOTION -> ConditionTypeAvro.MOTION;
+            case LUMINOSITY -> ConditionTypeAvro.LUMINOSITY;
+            case SWITCH -> ConditionTypeAvro.SWITCH;
+            case TEMPERATURE -> ConditionTypeAvro.TEMPERATURE;
+            case CO2LEVEL -> ConditionTypeAvro.CO2LEVEL;
+            case HUMIDITY -> ConditionTypeAvro.HUMIDITY;
+            default -> throw new IllegalArgumentException("Unknown condition type: " + type);
+        };
     }
 
-    private ConditionOperationAvro convertOperation(String operation) {
-        switch (operation) {
-            case "EQUALS":
-                return ConditionOperationAvro.EQUALS;
-            case "GREATER_THAN":
-                return ConditionOperationAvro.GREATER_THAN;
-            case "LOWER_THAN":
-                return ConditionOperationAvro.LOWER_THAN;
-            default:
-                throw new IllegalArgumentException("Unknown operation: " + operation);
-        }
+    private ConditionOperationAvro convertOperation(ConditionOperationProto operation) {
+        return switch (operation) {
+            case EQUALS -> ConditionOperationAvro.EQUALS;
+            case GREATER_THAN -> ConditionOperationAvro.GREATER_THAN;
+            case LOWER_THAN -> ConditionOperationAvro.LOWER_THAN;
+            default -> throw new IllegalArgumentException("Unknown operation: " + operation);
+        };
     }
 
-    private ActionTypeAvro convertActionType(String type) {
-        switch (type) {
-            case "ACTIVATE":
-                return ActionTypeAvro.ACTIVATE;
-            case "DEACTIVATE":
-                return ActionTypeAvro.DEACTIVATE;
-            case "INVERSE":
-                return ActionTypeAvro.INVERSE;
-            case "SET_VALUE":
-                return ActionTypeAvro.SET_VALUE;
-            default:
-                throw new IllegalArgumentException("Unknown action type: " + type);
-        }
+    private ActionTypeAvro convertActionType(ActionTypeProto type) {
+        return switch (type) {
+            case ACTIVATE -> ActionTypeAvro.ACTIVATE;
+            case DEACTIVATE -> ActionTypeAvro.DEACTIVATE;
+            case INVERSE -> ActionTypeAvro.INVERSE;
+            case SET_VALUE -> ActionTypeAvro.SET_VALUE;
+            default -> throw new IllegalArgumentException("Unknown action type: " + type);
+        };
     }
 }
